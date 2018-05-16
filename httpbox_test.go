@@ -142,7 +142,7 @@ func TestGetResizeSourceImageDoesntExists(t *testing.T) {
 }
 
 func TestGetResizeOk(t *testing.T) {
-	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&height=100&width=100", hostPort, goodImageURL))
+	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=%d&height=%d", hostPort, goodImageURL, minSize+1, minSize+1))
 	if err != nil {
 		t.Error(err)
 	}
@@ -151,7 +151,7 @@ func TestGetResizeOk(t *testing.T) {
 }
 
 func TestGetResizeNonJpeg(t *testing.T) {
-	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&height=100&width=100", hostPort, brokenImageURL))
+	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=%d&height=%d", hostPort, brokenImageURL, minSize+1, minSize+1))
 	if err != nil {
 		t.Error(err)
 	}
@@ -160,10 +160,37 @@ func TestGetResizeNonJpeg(t *testing.T) {
 }
 
 func TestGetResizeExceedWidthLimit(t *testing.T) {
-	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&height=100&width=%d", hostPort, goodImageURL, maxSize+1))
+	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&height=%d&width=%d", hostPort, goodImageURL, minSize+1, maxSize+1))
 	if err != nil {
 		t.Error(err)
 	}
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestGetResizeExceedHeightLimit(t *testing.T) {
+	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&height=%d&width=%d", hostPort, goodImageURL, maxSize+1, minSize+1))
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestGetResizeKeepRatioByWidth(t *testing.T) {
+	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=0&height=%d", hostPort, goodImageURL, minSize+1))
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestGetResizeKeepRatioByHeight(t *testing.T) {
+	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=%d&height=0", hostPort, goodImageURL, minSize+1))
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

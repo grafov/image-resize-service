@@ -108,7 +108,7 @@ func parseParams(r *http.Request) (imageURL string, width, height uint64, err er
 	if height, err = strconv.ParseUint(args.Get("height"), 10, 64); err != nil {
 		return
 	}
-	if width > 0 && height < minSize || height > maxSize {
+	if height > 0 && height < minSize || height > maxSize {
 		err = errors.New("height value is out of limit")
 		return
 	}

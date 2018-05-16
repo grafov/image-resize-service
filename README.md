@@ -3,11 +3,11 @@
 The code was written as the sample for the job interview. The code
 demonstrates:
 * using of HTTP-server and HTTP-client with Go sldlib
-* inmem caching of the service results
-* simple manipulations with JPEG-image format with Go stdlib
-* using of external library
-  [github.com/nfnt/resize](https://github.com/nfnt/resize) for image
-  resizing in native Go
+* advice client for cache results with using Etag
+* inmem caching of the results with limited cache size and LRU [github.com/coocood/freecache](https://github.com/coocood/freecache)
+* JPEG resizing with library
+  [github.com/nfnt/resize](https://github.com/nfnt/resize)
+
 
 The service has single HTTP-handler `GET /resize` that accepts `url`
 parameter that should pointe to a resource with JPEG-image. It loads

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/coocood/freecache"
+
 	"flag"
 	"fmt"
 	"net/http"
@@ -12,11 +14,16 @@ const version = "0.1"
 
 var (
 	hostPort string
+	cache    *freecache.Cache
 )
 
 func main() {
 	flag.StringVar(&hostPort, "listen-at", "localhost:8080", "listen for HTTP requests at host:port")
 	flag.Parse()
+
+	// For production services the size setting obviously should be
+	// move to config.
+	cache = freecache.NewCache(300 * 1024 * 1024)
 
 	// Why we need "/" handler for the simple service? Beter to show
 	// version on requests to root page for understanding that service

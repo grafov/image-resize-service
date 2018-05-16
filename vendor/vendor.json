@@ -3,6 +3,18 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "AhD99Vn+phH89hmYJFDqiS2gpFY=",
+			"path": "github.com/cespare/xxhash",
+			"revision": "48099fad606eafc26e3a569fad19ff510fff4df6",
+			"revisionTime": "2018-01-29T23:03:33Z"
+		},
+		{
+			"checksumSHA1": "g7R7E1qHvsv1ixJfXCMUy8+cB+s=",
+			"path": "github.com/coocood/freecache",
+			"revision": "036298587d3a11a2946fecb24ef983708e2e8944",
+			"revisionTime": "2018-03-04T01:59:25Z"
+		},
+		{
 			"checksumSHA1": "6z9MgcvNbdVGsAIvv6BHA1uALQA=",
 			"path": "github.com/nfnt/resize",
 			"revision": "83c6a9932646f83e3267f353373d47347b6036b2",

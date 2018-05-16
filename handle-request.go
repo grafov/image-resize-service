@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/nfnt/resize"
 
+	"bytes"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -25,6 +26,7 @@ const (
 	cachingDuration = 1 * time.Hour
 )
 
+// Implements handler for `/resize`. Moved out of main() for code clarity.
 func handleResizeRequest(w http.ResponseWriter, r *http.Request) {
 	var (
 		imageURL      string
@@ -39,7 +41,10 @@ func handleResizeRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("400 request error: %s", err), http.StatusBadRequest)
 		return
 	}
-	if useCached(w, r) {
+	if useClientCache(w, r) {
+		return
+	}
+	if useServerCache(w, imageURL, width, height) {
 		return
 	}
 	var (
@@ -53,11 +58,14 @@ func handleResizeRequest(w http.ResponseWriter, r *http.Request) {
 	opts := jpeg.Options{Quality: jpegQuality}
 	// Encoding process below could return error but the main cause of
 	// errors here are transport errors due broken connection on
-	// client side. They could be ignored safely. Image of very big
-	// size also could trigger error but this value far beyond the
-	// limits that set by `maxSize` in our code. Maybe for the
-	// exceptional safety it is better log error here.
-	jpeg.Encode(w, resizedImage, &opts)
+	// client side. They could be ignored safely we just skip caching
+	// of partial results.
+	buf := new(bytes.Buffer)
+	if err = jpeg.Encode(buf, resizedImage, &opts); err != nil {
+		return
+	}
+	w.Write(buf.Bytes())
+	cache.Set(formatCacheKey(imageURL, width, height), buf.Bytes(), int(cachingDuration.Seconds()))
 }
 
 // When we return more than two values from the function it is good
@@ -72,23 +80,23 @@ func parseParams(r *http.Request) (imageURL string, width, height uint64, err er
 		err = errors.New("non empty `url` parameter is mandatory")
 		return
 	}
-	if args.Get("w") == "" {
-		err = errors.New("non empty `w` parameter is mandatory")
+	if args.Get("width") == "" {
+		err = errors.New("non empty `width` parameter is mandatory")
 		return
 	}
-	if args.Get("h") == "" {
-		err = errors.New("non empty `h` parameter is mandatory")
+	if args.Get("height") == "" {
+		err = errors.New("non empty `height` parameter is mandatory")
 		return
 	}
 	imageURL = args.Get("url")
-	if width, err = strconv.ParseUint(args.Get("w"), 10, 64); err != nil {
+	if width, err = strconv.ParseUint(args.Get("width"), 10, 64); err != nil {
 		return
 	}
 	if width > 0 && width < minSize || width > maxSize {
 		err = errors.New("width value is out of limit")
 		return
 	}
-	if height, err = strconv.ParseUint(args.Get("h"), 10, 64); err != nil {
+	if height, err = strconv.ParseUint(args.Get("height"), 10, 64); err != nil {
 		return
 	}
 	if width > 0 && height < minSize || height > maxSize {
@@ -103,7 +111,7 @@ func parseParams(r *http.Request) (imageURL string, width, height uint64, err er
 }
 
 // Use client cache where possible.
-func useCached(w http.ResponseWriter, r *http.Request) bool {
+func useClientCache(w http.ResponseWriter, r *http.Request) bool {
 	const sep = "X"
 	hash := fnv.New64()
 	hash.Write([]byte(r.URL.RawQuery))
@@ -129,6 +137,19 @@ func useCached(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
+// Inmem cache with LRU. Keys expired after `cachingDuration`.
+func useServerCache(w http.ResponseWriter, url string, width, height uint64) bool {
+	var (
+		data []byte
+		err  error
+	)
+	if data, err = cache.Get(formatCacheKey(url, width, height)); err != nil {
+		return false
+	}
+	w.Write(data)
+	return true
+}
+
 // Loads data from URL and try to convert it to JPEG.
 func loadURL(imageURL string) (image.Image, error) {
 	resp, err := http.Get(imageURL)
@@ -137,4 +158,15 @@ func loadURL(imageURL string) (image.Image, error) {
 	}
 	defer resp.Body.Close()
 	return jpeg.Decode(resp.Body)
+}
+
+// Helper for making the key for caching in single place.
+func formatCacheKey(url string, width, height uint64) []byte {
+	buf := new(bytes.Buffer)
+	buf.WriteString(url)
+	buf.WriteRune(':')
+	buf.WriteString(strconv.FormatUint(width, 10))
+	buf.WriteRune(':')
+	buf.WriteString(strconv.FormatUint(height, 10))
+	return buf.Bytes()
 }

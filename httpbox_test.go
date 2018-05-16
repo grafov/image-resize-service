@@ -8,9 +8,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+)
+
+const (
+	uniqImageSize = minSize + 2 // for avoiding caching during the tests, all other requests use minSize+1
 )
 
 var (
@@ -87,7 +92,21 @@ func TestGetRoot(t *testing.T) {
 	assert.Contains(t, string(data), fmt.Sprintf("Sample Image Resizer ver. %s", version))
 }
 
-func TestGetResizeNoArgs(t *testing.T) {
+func TestPutResize_WrongMethod(t *testing.T) {
+	client := &http.Client{}
+	req, err := http.NewRequest("PUT", "http://"+hostPort+"/resize", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
+}
+
+func TestGetResize_NoArgs(t *testing.T) {
 	resp, err := http.Get("http://" + hostPort + "/resize")
 	if err != nil {
 		t.Error(err)
@@ -96,7 +115,7 @@ func TestGetResizeNoArgs(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestGetResizeTotallyWrongArgs(t *testing.T) {
+func TestGetResize_TotallyWrongArgs(t *testing.T) {
 	resp, err := http.Get("http://" + hostPort + "/resize?username=xxx&password=yyy")
 	if err != nil {
 		t.Error(err)
@@ -105,7 +124,7 @@ func TestGetResizeTotallyWrongArgs(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestGetResizeNoSizes(t *testing.T) {
+func TestGetResize_NoSizes(t *testing.T) {
 	resp, err := http.Get("http://" + hostPort + "/resize?url=xxx.jpeg")
 	if err != nil {
 		t.Error(err)
@@ -114,7 +133,7 @@ func TestGetResizeNoSizes(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestGetResizeNoHeight(t *testing.T) {
+func TestGetResize_NoHeight(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=%d", hostPort, goodImageURL, minSize+1))
 	if err != nil {
 		t.Error(err)
@@ -123,7 +142,7 @@ func TestGetResizeNoHeight(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestGetResizeNoWidth(t *testing.T) {
+func TestGetResize_NoWidth(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&height=%d", hostPort, goodImageURL, minSize+1))
 	if err != nil {
 		t.Error(err)
@@ -132,7 +151,7 @@ func TestGetResizeNoWidth(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestGetResizeSourceImageDoesntExists(t *testing.T) {
+func TestGetResize_SourceImageDoesntExists(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=notexisted.jpeg&height=%d&width=%d", hostPort, minSize+1, minSize+1))
 	if err != nil {
 		t.Error(err)
@@ -141,7 +160,7 @@ func TestGetResizeSourceImageDoesntExists(t *testing.T) {
 	assert.Equal(t, http.StatusFailedDependency, resp.StatusCode)
 }
 
-func TestGetResizeOk(t *testing.T) {
+func TestGetResize_Ok(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=%d&height=%d", hostPort, goodImageURL, minSize+1, minSize+1))
 	if err != nil {
 		t.Error(err)
@@ -150,7 +169,7 @@ func TestGetResizeOk(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-func TestGetResizeNonJpeg(t *testing.T) {
+func TestGetResize_NonJpeg(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=%d&height=%d", hostPort, brokenImageURL, minSize+1, minSize+1))
 	if err != nil {
 		t.Error(err)
@@ -159,7 +178,7 @@ func TestGetResizeNonJpeg(t *testing.T) {
 	assert.Equal(t, http.StatusFailedDependency, resp.StatusCode)
 }
 
-func TestGetResizeExceedWidthLimit(t *testing.T) {
+func TestGetResize_ExceedWidthLimit(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&height=%d&width=%d", hostPort, goodImageURL, minSize+1, maxSize+1))
 	if err != nil {
 		t.Error(err)
@@ -168,7 +187,7 @@ func TestGetResizeExceedWidthLimit(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestGetResizeExceedHeightLimit(t *testing.T) {
+func TestGetResize_ExceedHeightLimit(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&height=%d&width=%d", hostPort, goodImageURL, maxSize+1, minSize+1))
 	if err != nil {
 		t.Error(err)
@@ -177,7 +196,7 @@ func TestGetResizeExceedHeightLimit(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestGetResizeKeepRatioByWidth(t *testing.T) {
+func TestGetResize_KeepRatioByWidth(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=0&height=%d", hostPort, goodImageURL, minSize+1))
 	if err != nil {
 		t.Error(err)
@@ -186,11 +205,26 @@ func TestGetResizeKeepRatioByWidth(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-func TestGetResizeKeepRatioByHeight(t *testing.T) {
+func TestGetResize_KeepRatioByHeight(t *testing.T) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/resize?url=%s&width=%d&height=0", hostPort, goodImageURL, minSize+1))
 	if err != nil {
 		t.Error(err)
 	}
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestGetResize_CheckForEtag(t *testing.T) {
+	fullreq := fmt.Sprintf("http://%s/resize?url=%s&width=%d&height=0", hostPort, goodImageURL, uniqImageSize)
+	resp, err := http.Get(fullreq)
+	if err != nil {
+		t.Error(err)
+	}
+	w := httptest.NewRecorder()
+	ok := useClientCache(w, resp.Request)
+	writtenResp := w.Result()
+
+	assert.False(t, ok)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, resp.Header.Get("Etag"), writtenResp.Header.Get("Etag"))
 }

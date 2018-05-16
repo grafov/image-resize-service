@@ -5,11 +5,14 @@ import (
 
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"image"
 	"image/jpeg"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // Useful defaults and limits that could be moved to the config in
@@ -19,6 +22,7 @@ const (
 	maxSize         = 8192
 	jpegQuality     = 92
 	resizeAlgorithm = resize.Bilinear
+	cachingDuration = 1 * time.Hour
 )
 
 func handleResizeRequest(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +37,9 @@ func handleResizeRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if imageURL, width, height, err = parseParams(r); err != nil {
 		http.Error(w, fmt.Sprintf("400 request error: %s", err), http.StatusBadRequest)
+		return
+	}
+	if useCached(w, r) {
 		return
 	}
 	var (
@@ -93,6 +100,33 @@ func parseParams(r *http.Request) (imageURL string, width, height uint64, err er
 		return
 	}
 	return
+}
+
+// Use client cache where possible.
+func useCached(w http.ResponseWriter, r *http.Request) bool {
+	const sep = "X"
+	hash := fnv.New64()
+	hash.Write([]byte(r.URL.RawQuery))
+	// Etag value has two parts: 1) hash based on URL string 2) timestamp.
+	etagHash := strconv.FormatUint(hash.Sum64(), 10)
+	etagTs := strconv.FormatInt(time.Now().Unix(), 10)
+
+	if match := r.Header.Get("If-None-Match"); match != "" {
+		partsOfEtag := strings.SplitN(match, sep, 2)
+		// Check for etag has two parts as declared above and URL-hash is equal.
+		if len(partsOfEtag) == 2 && partsOfEtag[0] == etagHash {
+			// Second part of etag should be timestamp so we can check
+			// duration since previuous call for this URL.
+			clientTs, _ := strconv.ParseInt(partsOfEtag[1], 10, 64)
+			if time.Since(time.Unix(clientTs, 0)) < cachingDuration {
+				w.WriteHeader(http.StatusNotModified)
+				return true
+			}
+		}
+	}
+
+	w.Header().Set("Etag", etagHash+sep+etagTs)
+	return false
 }
 
 // Loads data from URL and try to convert it to JPEG.

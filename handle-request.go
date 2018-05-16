@@ -28,6 +28,10 @@ const (
 
 // Implements handler for `/`. Moved out of main() for code clarity.
 func handleRootRequest(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	fmt.Fprintln(w, "Sample Image Resizer ver.", version)
 }
 

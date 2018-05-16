@@ -26,6 +26,11 @@ const (
 	cachingDuration = 1 * time.Hour
 )
 
+// Implements handler for `/`. Moved out of main() for code clarity.
+func handleRootRequest(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Sample Image Resizer ver.", version)
+}
+
 // Implements handler for `/resize`. Moved out of main() for code clarity.
 func handleResizeRequest(w http.ResponseWriter, r *http.Request) {
 	var (

@@ -4,13 +4,16 @@ import (
 	"github.com/coocood/freecache"
 
 	"flag"
-	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
 )
 
 const version = "0.1"
+
+const (
+	// For production services the size setting obviously should be
+	// move to config.
+	cacheSize = 300 * 1024 * 1024
+)
 
 var (
 	hostPort string
@@ -21,16 +24,14 @@ func main() {
 	flag.StringVar(&hostPort, "listen-at", "localhost:8080", "listen for HTTP requests at host:port")
 	flag.Parse()
 
-	// For production services the size setting obviously should be
-	// move to config.
-	cache = freecache.NewCache(300 * 1024 * 1024)
+	cache = freecache.NewCache(cacheSize)
 
 	// Why we need "/" handler for the simple service? Beter to show
 	// version on requests to root page for understanding that service
 	// you have on this port. Getting the root page could be used by
 	// monitoring service for health checks for example.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Sample Image Resizer ver.", version)
+		handleRootRequest(w, r)
 	})
 	// Move real handling to another function for keeping main() short
 	// and clean.
@@ -40,8 +41,4 @@ func main() {
 	if err := http.ListenAndServe(hostPort, nil); err != nil {
 		panic(err)
 	}
-
-	terminate := make(chan os.Signal)
-	signal.Notify(terminate, os.Interrupt, os.Kill)
-	<-terminate
 }
